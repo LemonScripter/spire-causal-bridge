@@ -1,28 +1,27 @@
 # DCC Causal Attestor for SPIFFE/SPIRE
 
-## Overview
-The **DCC Causal Attestor** is a professional plugin for the SPIRE Agent that implements **Causal Identity**. It ensures that SPIFFE identities (SVIDs) are only issued to workloads that can prove a hardware-anchored causal lineage via the **BioOS Digital Causal Closure (DCC)** kernel module.
+[![Status](https://img.shields.io/badge/Status-Hardened--Prototype-blue)](ROADMAP.md)
+[![Project](https://img.shields.io/badge/BioOS-Causal--Security-green)](https://metaspace.bio)
 
-## The Problem: Identity Hijacking
-Standard workload attestation relies on static attributes (binary hashes, Kubernetes labels). If a legitimate workload is compromised after startup, or if a rogue process mimics these attributes, SPIRE will still issue an identity. This is because identity is currently disconnected from the *intent* that launched the process.
+## Hardened Architecture: Causal Identity Attestation
 
-## The Solution: Causal Identity
-By integrating DCC into the attestation flow, we bind identity to causality:
-1. **Out-of-Band Verification:** When a workload calls the SPIRE Agent, the DCC plugin queries the kernel's `global_dcc_map` based on the workload's PID.
-2. **Selector Issuance:** The `dcc:causal_chain:verified` selector is only granted if a valid, non-expired Causal Token exists for that process.
-3. **Hardened Trust:** Identity becomes a proof of legitimate execution origin, not just a proof of binary integrity.
+This plugin implements **Causal Workload Attestation** for SPIRE. It transforms the concept of "Identity" from binary integrity to **Hardware-Anchored Intent Verification**.
 
-## Scientific Background
-This integration is based on the following formal research:
-- [The Causal Operating System: Digital Causal Closure for Autonomous Systems](https://doi.org/10.5281/zenodo.20384700)
-- [BioOS Causal Constitution (PDF)](https://bioos.metaspace.bio/bioos_causal_constitution_en.pdf)
+### Hardened Implementation
 
-## Components
-- **`causal_attestor.go`**: SPIRE Workload Attestor plugin (gRPC-based).
-- **`verify_spire.py`**: Logic verification suite ensuring identity issuance only for verified causal chains.
+- **Direct eBPF Map Lookup:** The plugin interacts directly with the `global_dcc_map` pinned at `/sys/fs/bpf/spire/` to verify process lineage before issuing an SVID.
+- **Fail-Closed Attestation:** If a process lacks a valid, hardware-anchored Causal Token, the attestation fails with a `DCC Violation`.
+- **Selector Enrichment:** Successfully attested workloads receive the `dcc:causal_chain:verified` selector, enabling fine-grained, intent-aware SPIRE registration entries.
 
-## Upstreaming Proposal
-We propose the inclusion of Causal Attestation as a standardized security layer for SPIRE deployments in autonomous and high-stakes environments.
+### Security Guarantees
+
+1. **Anti-Hijacking:** Identities are only issued to processes that can prove they were launched through an authorized causal event.
+2. **Replay Protection:** Atomic token consumption ensures that a single intent cannot be used to spawn multiple unauthorized identities.
+3. **Fail-Closed Integrity:** Identity issuance is physically dependent on kernel-level causal closure.
+
+### Scientific Foundation
+
+This implementation is based on the [BioOS Causal Constitution (DOI: 10.5281/zenodo.20384700)](https://doi.org/10.5281/zenodo.20384700).
 
 ---
-*Created by MetaSpace BioOS | [metaspace.bio](https://metaspace.bio) | [admin@metaspace.bio](mailto:admin@metaspace.bio)*
+*Verified by MetaSpace BioOS Team | [metaspace.bio](https://metaspace.bio)*

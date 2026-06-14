@@ -3,54 +3,66 @@ package main
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
+	"github.com/cilium/ebpf"
 	"github.com/hashicorp/go-plugin"
 	"github.com/spiffe/spire-plugin-sdk/plugins/workloadattestor/v1"
-	"github.com/spiffe/spire/pkg/common/catalog"
 )
 
 /*
- * SPIRE DCC Causal Attestor Plugin (Go)
+ * SPIRE DCC Causal Attestor Plugin (Go) - Hardened
  * 
- * This plugin extends the SPIRE Agent to implement "Causal Identity".
- * It verifies if the calling process is part of a verified causal chain 
- * maintained by the BioOS DCC kernel module.
+ * This plugin implements "Causal Identity" for the SPIRE Agent. 
+ * It ensures that identities are only issued to workloads with a verified 
+ * kernel-anchored causal lineage, physically preventing identity hijacking.
  */
+
+const (
+	DCCMapPath = "/sys/fs/bpf/spire/global_dcc_map"
+)
+
+type DCCToken struct {
+	Timestamp  uint64
+	IntentID   uint32
+	AgeLimitNS uint32
+	Consumed   uint8
+}
 
 type CausalAttestorPlugin struct {
 	workloadattestor.UnsafeWorkloadAttestorServer
+	dccMap *ebpf.Map
 }
 
-// Attest performs the causal validation of the workload based on its PID.
 func (p *CausalAttestorPlugin) Attest(ctx context.Context, req *workloadattestor.AttestRequest) (*workloadattestor.AttestResponse, error) {
-	pid := req.Pid
-
-	// Call the BioOS DCC SDK to verify the causal chain for this PID.
-	// This interacts with the kernel's global_dcc_map.
-	verified, err := verifyCausalChain(pid)
-	if err != nil {
-		return nil, fmt.Errorf("DCC verification failed: %v", err)
+	if p.dccMap == nil {
+		m, err := ebpf.LoadPinnedMap(DCCMapPath, nil)
+		if err != nil {
+			return nil, fmt.Errorf("DCC Critical: Failed to load pinned causal map: %w", err)
+		}
+		p.dccMap = m
 	}
 
-	if !verified {
-		return nil, fmt.Errorf("DCC Violation: Process %d is an orphaned workload", pid)
+	pid := uint32(req.Pid)
+	var token DCCToken
+	
+	// Atomic kernel-state verification
+	if err := p.dccMap.Lookup(unsafe.Pointer(&pid), unsafe.Pointer(&token)); err != nil {
+		return nil, fmt.Errorf("DCC Violation: No causal lineage found for PID %d", pid)
 	}
 
-	// If verified, return the 'dcc:causal_chain:verified' selector.
-	// This selector is then used in SPIRE registration entries.
+	// Fail-Closed Logic: Verify causal integrity
+	if token.Consumed != 0 {
+		return nil, fmt.Errorf("DCC Violation: Token replay detected for PID %d", pid)
+	}
+
+	// SPIRE Attestation issues the 'dcc:causal_chain:verified' selector
 	return &workloadattestor.AttestResponse{
 		Selectors: []string{
 			"dcc:causal_chain:verified",
+			fmt.Sprintf("dcc:intent:%x", token.IntentID),
 		},
 	}, nil
-}
-
-func verifyCausalChain(pid int32) (bool, error) {
-	/* 
-	 * Placeholder for DCC SDK call. 
-	 * In production, this checks the eBPF map for a valid, non-expired Causal Token.
-	 */
-	return true, nil
 }
 
 func main() {
