@@ -11,11 +11,15 @@ import (
 )
 
 /*
- * SPIRE DCC Causal Attestor Plugin (Go) - Hardened
- * 
- * This plugin implements "Causal Identity" for the SPIRE Agent. 
- * It ensures that identities are only issued to workloads with a verified 
- * kernel-anchored causal lineage, physically preventing identity hijacking.
+ * SPIRE DCC reference plugin (Go) — SUPERSEDED FRAMING, kept for reference.
+ *
+ * NOTE: this file was written as a WorkloadAttestor that gated SVID *issuance*
+ * on a causal token. That conflates a durable property (identity) with a
+ * transient one (per-action causal freshness) and is the wrong layer. The
+ * corrected, enforced architecture is AUTHORIZATION AT THE POINT OF USE: SPIRE
+ * issues identity unchanged; the causal check is applied when the SVID is
+ * presented/used, consuming the already-attested identity. See README.md.
+ * Retained only to show the selector/decision shape.
  */
 
 const (

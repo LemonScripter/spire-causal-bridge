@@ -13,10 +13,14 @@ import (
 )
 
 /*
- * DCC Causal Attestor for SPIRE: Standalone Proof
- * 
- * This program simulates the SPIRE workload attestation logic.
- * It verifies if a PID is part of a verified causal chain.
+ * DCC Causal Authorization for SPIRE — reference integration SKETCH.
+ *
+ * NOTE on architecture: the enforced design is AUTHORIZATION AT THE POINT OF USE
+ * (the causal check is applied when the SVID is presented/used, e.g. at the
+ * egress syscall), consuming the already-attested identity. It does NOT gate
+ * SVID issuance and does NOT modify SPIRE. This file only sketches the decision
+ * logic (causal-token lookup + freshness) for readers; the kernel producer/guard
+ * is under controlled disclosure (patent pending). See README.md / VERIFICATION.md.
  */
 
 const DCCMapPath = "/sys/fs/bpf/spire/global_dcc_map"

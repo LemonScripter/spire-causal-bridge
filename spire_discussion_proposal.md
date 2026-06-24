@@ -1,27 +1,51 @@
-# Proposal: Zero-Trust Causal Attestation for SPIRE Agents
+# Proposal: Causal Authorization as a complement to SPIRE identity
 
 Hello SPIFFE/SPIRE Community,
 
-Current workload attestation in SPIRE is highly effective at verifying *environment* and *integrity* (via hashes, labels, and metadata). However, there is an emerging need to verify **Causality**: the proof of intent that originated the workload's execution.
+This is a corrected framing of an earlier proposal. SPIRE answers **who** a
+workload is. The idea here is **not** to change that, nor to gate SVID issuance
+on anything transient. It is a separate **authorization** concern, enforced **at
+the point of use**.
 
-### The Problem: Contextless Identity
-Identity issuance is currently disconnected from the causal event that triggered the process. A correctly signed binary, if launched autonomously by an exploit or a logic bug, still qualifies for an SVID because its environmental selectors remain valid.
+### The gap
 
-### Proposal: Causal Identity Attestor
-I propose a new **Workload Attestor Plugin** for the SPIRE Agent that leverages **Digital Causal Closure (DCC)**. This plugin verifies if a process is part of a hardware-anchored causal chain before granting identity-defining selectors.
+Identity issuance is — correctly — decoupled from the causal event behind a
+process. A correctly signed binary, if launched or driven by an exploit or a
+logic bug, still holds a valid SVID because its identity is real. The risk lives
+in the **asynchronous post-exploitation tail**: delayed C2 beacons, reverse
+shells, orphaned exfil, self-initiated logic-bug actions — all presenting a valid
+SVID.
 
-### Proof of Concept
-I have developed a PoC plugin that interfaces with a kernel-level DCC module to attest workloads based on their causal lineage:
-[https://github.com/LemonScripter/spire-causal-bridge](https://github.com/LemonScripter/spire-causal-bridge)
+### The proposal
 
-### Key Benefits:
-1. **Dynamic Trust:** Identity is only issued if the process can prove it was caused by a verified event (e.g., a signed scheduler command).
-2. **Orphaned Workload Prevention:** Orphaned processes (launched without a valid token) are denied identity, preventing them from accessing sensitive mesh resources.
-3. **Formal Foundation:** Based on peer-reviewed research on Causal Operating Systems (DOI: 10.5281/zenodo.20384700).
+A kernel-anchored **causal authorization** check, applied **when the SVID is
+presented / used** (e.g. at the egress syscall), that admits an action only if it
+falls inside a **fresh causal window of a genuine external stimulus**. It
+consumes the already-attested identity; it does not modify SPIRE.
 
-We believe Causal Attestation is the next logical step in the evolution of Zero-Trust identity for autonomous and cloud-native workloads.
+Why at use and not at issuance: the causal window is sub-millisecond, while an
+X509-SVID TTL is ~an hour and cached — a microsecond-fresh property cannot live
+inside an hour-long credential without being stale-by-construction.
+
+### What distinguishes it from identity-based authorization
+
+Identity-presentation authorization (JWT present / X509 ownership) cannot separate
+a legitimate action from a self-initiated one when both carry the **same valid
+SVID**. A causal check can. We have validated this on a real kernel: same
+identity, two egress attempts differing only in causal provenance — the caused
+one admitted, the self-initiated one denied fail-closed, with zero false denials
+and zero causal false-positives (raw logs available on request).
+
+### Scope
+
+Addresses the **asynchronous tail**, not in-band synchronous exploitation inside
+a genuine request window. v1 targets blocking-server workloads. Assumes a trusted
+kernel.
+
+### Foundation
+
+Based on *The Causal Operating System: Digital Causal Closure for Autonomous
+Systems* (DOI: 10.5281/zenodo.20384700).
 
 Best regards,
-
-**MetaSpace BioOS Team**
-[metaspace.bio](https://metaspace.bio) | [admin@metaspace.bio](mailto:admin@metaspace.bio)
+**MetaSpace BioOS Team** — [metaspace.bio](https://metaspace.bio) | admin@metaspace.bio
